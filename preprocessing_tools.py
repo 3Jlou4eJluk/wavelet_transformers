@@ -3,6 +3,7 @@ import torch
 import pywt
 
 
+
 def interleave(a, b):
     '''
     Interleaves 2 numpy arrays
@@ -17,12 +18,16 @@ def interleave(a, b):
     c[:, l2 * 2:] = a[:, l2:]
     return c
 
-def discretizate_array(array, seg_start, seg_end, N):
+def discretizate_array(array, N):
+    flarr = array.flatten()
+    q1 = np.quantile(flarr, .25)
+    q3 = np.quantile(flarr, .75)
     # searching segments bounds
-    bin_edges = np.linspace(seg_start, seg_end, N+1)
+    bin_edges = np.linspace(q1, q3, N+1)
     # searching bins indices
     bin_indices = np.digitize(array, bin_edges)
     return bin_indices
+
 
 
 def build_batch_features_obj(
@@ -127,7 +132,7 @@ def build_batch_features(
     
     res_tok_repr = None
 
-    total_token_count = n_levels + ch_count + 3 + 32 * 32 + n_bins
+    total_token_count = n_levels + ch_count + 3 + 32 * 32 + n_bins + 2
     for lvl in range(n_levels):
         lvl_tok_repr = None
         for ch in range(ch_count):
@@ -147,7 +152,7 @@ def build_batch_features(
 
                 # Coefs discretization and building tokens features
                 coefs = np.take_along_axis(resh_coefs, arg_part, axis=1)
-                discr_coefs = discretizate_array(coefs, 0., 1., n_bins)
+                discr_coefs = discretizate_array(coefs, n_bins)
                 # Shifting coefficients tokens. It's important for tokens specification
                 discr_coefs += n_levels + ch_count + len(hf_c_list) + 32 * 32
                 arg_part += n_levels + ch_count + len(hf_c_list)
@@ -175,12 +180,12 @@ def build_batch_features(
     tok_repr = res_tok_repr
 
     if add_approx:
-        approx_token = n_levels + ch_count + 3 + 32 ** 2 + n_bins + 2
+        approx_token = total_token_count
         column_to_insert = np.full(tok_repr.shape[0], approx_token)
         tok_repr = np.insert(tok_repr, tok_repr.shape[1], column_to_insert, axis=1)
         for ch in range(ch_count):
             ch_approx = channel_wise_coeffs[ch][0].reshape((images.shape[0], -1))
-            ch_approx = discretizate_array(ch_approx, 0., 1., n_bins)
+            ch_approx = discretizate_array(ch_approx, n_bins)
             ch_approx += n_levels + ch_count + 3 + 32 * 32
             column_to_insert = np.full(tok_repr.shape[0], n_levels + ch)
             ch_approx = np.insert(ch_approx, 0, column_to_insert, axis=1)
@@ -188,10 +193,10 @@ def build_batch_features(
         total_token_count += 1
     
     if use_original_data:
-        original_data_token = n_levels + ch_count + 3 + 32 ** 2 + n_bins + 3
+        original_data_token = total_token_count
         column_to_insert = np.full(tok_repr.shape[0], original_data_token)
         additional_data = images.mean(axis=3).reshape((images.shape[0], -1))
-        additional_data = discretizate_array(additional_data, 0., 1., n_bins)
+        additional_data = discretizate_array(additional_data, n_bins)
         additional_data += n_levels + ch_count + 3 + 32 * 32
         additional_data = np.insert(additional_data, 0, column_to_insert, axis=1)
         tok_repr = np.concatenate((tok_repr, additional_data), axis=1)

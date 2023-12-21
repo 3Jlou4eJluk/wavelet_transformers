@@ -35,7 +35,7 @@ class Learner:
         }
 
         self.model = model
-        self.optimzer = optimizer
+        self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.scheduler = scheduler
 
@@ -48,32 +48,35 @@ class Learner:
     def train_epoch(self, log_train_quality=False, verbose=False, epoch_no=None):
         self.model.train()
 
-        loss_sum = 0.
-        acc_sum = 0.
-        for x, y in tqdm(self.train_dl, disabel=not verbose, leave=True):
-            def closure(x, y):
-                self.optimzer.zero_grad()
-                pred = self.model.forward(x.to(self.device))
-                loss = self.loss_fn(pred, y.squeeze().to(self.device))
+        loss_sum = []
+        acc_sum = []
+        for x, y in tqdm(self.train_dl, disable=not verbose, leave=True):
+            if 'cpu' not in self.device:
+                x = x.to(self.device)
+                y = y.to(self.device)
+            def closure(x, y, loss_sum, acc_sum):
+                self.optimizer.zero_grad()
+                pred = self.model.forward(x)
+                loss = self.loss_fn(pred, y.squeeze())
                 loss.backward()
 
                 pred_classes = torch.argmax(pred, dim=1)
-                loss_sum += float(loss.item())
-                acc_sum += (
-                    pred_classes.detach().squeeze() == y.to(self.device).squeeze()
-                ).sum() / len(y)
+                loss_sum.append(float(loss.item()))
+                acc_sum.append(float((
+                    pred_classes.detach().squeeze() == y.squeeze()
+                ).sum() / len(y)))
             
-            closure = partial(closure, x, y)
+            closure = partial(closure, x, y, loss_sum, acc_sum)
             self.optimizer.step(closure)
             if self.scheduler is not None:
                 self.scheduler.step()
-        loss_sum /= len(self.train_dl)
-        acc_sum /= len(self.train_dl)
+        loss_sum_val = sum(loss_sum) / len(self.train_dl)
+        acc_sum_val = sum(acc_sum) / len(self.train_dl)
 
         if log_train_quality and (epoch_no is not None):
             self.metrics['train_loss_epoch_no'].append(epoch_no)
-            self.metrics['train_loss'].append(loss_sum)
-            self.metrics['train_acc'].append(acc_sum)
+            self.metrics['train_loss'].append(loss_sum_val)
+            self.metrics['train_acc'].append(acc_sum_val)
 
 
     def validation_epoch(self, log_train_quality=False, verbose=False, epoch_no=None):
@@ -85,44 +88,63 @@ class Learner:
         val_acc = 0.
         with torch.no_grad():
             if log_train_quality:
-                for x, y in tqdm(self.train_dl, disable=not verbose):
-                    pred = self.model.forward(x.to(self.device))
+                for x, y in tqdm(self.train_dl, disable=not verbose, leave=True):
+                    if 'cpu' not in self.device:
+                        x = x.to(self.device)
+                        y = y.to(self.device)
+                    pred = self.model.forward(x)
                     pred_classes = torch.argmax(pred, dim=1)
-                    train_acc += (
-                        pred_classes.detach().squeeze() == y.to(self.device).squeeze()
-                    ).sum() / len(y)
+                    train_acc += float((
+                        pred_classes.detach().squeeze() == y.squeeze()
+                    ).sum() / len(y))
 
-                    loss = self.loss_fn(pred, y.squeeze().to(self.device))
+                    loss = self.loss_fn(pred, y.squeeze())
                     train_loss += float(loss.item())
                 train_loss /= len(self.train_dl)
                 train_acc /= len(self.train_dl)
             
             for x, y in tqdm(self.val_dl, disable=not verbose):
-                pred = self.model.forward(x.to(self.device))
+                if 'cpu' not in self.device:
+                    x = x.to(self.device)
+                    y = y.to(self.device)
+                pred = self.model.forward(x)
                 pred_classes = torch.argmax(pred, dim=1)
-                val_acc += (
-                    pred_classes.detach().squeeze() == y.to(self.device).squeeze()
-                ).sum() / len(y)
+                val_acc += float((
+                    pred_classes.detach().squeeze() == y.squeeze()
+                ).sum() / len(y))
+                
+                loss = self.loss_fn(pred, y.squeeze())
                 val_loss += float(loss.item())
             
             val_acc /= len(self.val_dl)
             val_loss /= len(self.val_dl)
         
         if epoch_no is not None:
-            self.metrics['train_loss_epoch_no'].append(epoch_no)
+            if log_train_quality:
+                self.metrics['train_loss_epoch_no'].append(epoch_no)
+                self.metrics['train_loss'].append(train_loss)
+                self.metrics['train_acc'].append(train_acc)
+
             self.metrics['val_loss_epoch_no'].append(epoch_no)
-            self.metrics['train_loss'].append(train_loss)
-            self.metrics['train_acc'].append(train_acc)
             self.metrics['val_loss'].append(val_loss)
             self.metrics['val_acc'].append(val_acc)
 
     def train_cycle(self):
-        for epoch in range(self.epochs):
+        for epoch in (pbar := tqdm(range(self.epochs), total=self.epochs, disable=False)):
             self.train_epoch(log_train_quality=True, verbose=True, epoch_no=epoch)
-            if not epoch % 2:
+            if not epoch % 1:
                 self.validation_epoch(log_train_quality=False, verbose=True, epoch_no=epoch)
+                pbar.set_description(('Loss (Train/Test): {0:.3f}/{1:.3f}.\n' +\
+                                     'Accuracy,% (Train/Test): {2:.2f}/{3:.2f}.\n' +\
+                                     'Update Epoch: {4}').format(
+                    self.metrics['train_loss'][-1], self.metrics['val_loss'][-1], 
+                    self.metrics['train_acc'][-1], self.metrics['val_acc'][-1],
+                    epoch
+                ))
 
     def action(self):
+        if 'cpu' not in self.device:
+            self.model.to(self.device)
         self.train_cycle()
 
 

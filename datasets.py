@@ -20,7 +20,7 @@ class DatasetV4(torch.utils.data.Dataset):
         )
     
     def __getitem__(self, idx):
-        return self.objs_data[idx], self.labels[idx]
+        return torch.tensor(self.objs_data[idx], dtype=torch.long), torch.tensor(self.labels[idx], dtype=torch.long)
     
     def __len__(self):
         return self.objs_data.shape[0]
