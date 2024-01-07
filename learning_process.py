@@ -24,25 +24,25 @@ class ModelCheckpoint:
     
 
     def save(self, model):
-        torch.save(model, self.filepath)
-        with open('model_checkpoint.pkl', 'wb') as f:
+        torch.save(model, f"{self.filepath}/model_save.pt")
+        with open(f'{self.filepath}/model_checkpoint.pkl', 'wb') as f:
             pickle.dump(self, f)
     
     def load(self):
-        with open('model_checkpoint.pkl', 'rb') as f:
+        with open(f'{self.filepath}/model_checkpoint.pkl', 'rb') as f:
             loaded_object = pickle.load(f)
             self.val_acc = loaded_object.val_acc
             self.val_loss = loaded_object.val_loss
             self.train_acc = loaded_object.train_acc
             self.train_loss = loaded_object.train_loss
-        return torch.load(self.filepath)
+        return torch.load(f"{self.filepath}/model_save.pt")
 
     def __repr__(self):
         return f"<Model Checkpoint>\n"\
              + f"Validation Accuracy: {self.val_acc}\n"\
              + f"Validation Loss: {self.val_loss}\n"\
              + f"Train Accuracy: {self.train_acc}\n"\
-             + f"Train Loss: {self.train_loss}"
+             + f"Train Loss: {self.train_loss}\n"
         
 
 
@@ -66,7 +66,7 @@ class Preprocessor:
 class Learner:
     def __init__(
             self, model, optimizer, loss_fn, scheduler, 
-            train_dl, val_dl, device, epochs, save_best_models=False
+            train_dl, val_dl, device, epochs, checkpoint_path=None
         ):
         self.metrics = {
             "train_loss": [],
@@ -81,7 +81,7 @@ class Learner:
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.scheduler = scheduler
-        self.save_best_models = save_best_models
+        self.checkpoint_path = checkpoint_path
 
         self.train_dl = train_dl
         self.val_dl = val_dl
@@ -91,7 +91,7 @@ class Learner:
 
 
         # service fields
-        self.best_val_accuracy = None
+        self.model_checkpoint = ModelCheckpoint(self.checkpoint_path)
 
     def train_epoch(self, log_train_quality=False, verbose=False, epoch_no=None):
         self.model.train()
@@ -176,6 +176,10 @@ class Learner:
             self.metrics['val_loss_epoch_no'].append(epoch_no)
             self.metrics['val_loss'].append(val_loss)
             self.metrics['val_acc'].append(val_acc)
+            self.model_checkpoint.update(
+                self.model, train_acc, train_loss, 
+                val_acc, val_loss
+            )
 
     def train_cycle(self):
         for epoch in (pbar := tqdm(range(self.epochs), total=self.epochs, disable=False)):
