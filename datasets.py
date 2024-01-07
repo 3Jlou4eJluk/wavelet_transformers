@@ -5,9 +5,10 @@ from preprocessing_tools import build_batch_features
 
 
 class DatasetV4(torch.utils.data.Dataset):
-    def __init__(self, images, labels, n_levels, coef_rate, 
-                 use_original_data, add_approx, n_bins
-                ):
+    def __init__(
+            self, images, labels, n_levels, coef_rate, 
+            use_original_data, add_approx, n_bins
+        ):
         super(DatasetV4, self).__init__()
         self.objs_data, self.labels, self.tokens_per_obj = build_batch_features(
             images,

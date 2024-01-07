@@ -22,9 +22,10 @@ class Preprocessor:
 
 
 class Learner:
-    def __init__(self, model, optimizer, loss_fn, scheduler, 
-                 train_dl, val_dl, device, epochs
-                ):
+    def __init__(
+            self, model, optimizer, loss_fn, scheduler, 
+            train_dl, val_dl, device, epochs
+        ):
         self.metrics = {
             "train_loss": [],
             "val_loss": [],

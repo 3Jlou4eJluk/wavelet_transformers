@@ -29,7 +29,10 @@ class PositionalEncoding1D(torch.nn.Module):
 
 
 class LinearModule(nn.Module):
-    def __init__(self, input_size, hidden_size, n_layers, bn_enable, dp, last_bn_enable=True, output_size=None):
+    def __init__(
+            self, input_size, hidden_size, n_layers, bn_enable, dp, 
+            last_bn_enable=True, output_size=None
+        ):
         super(LinearModule, self).__init__()
 
         self.layers = nn.ModuleList()
@@ -56,21 +59,12 @@ class LinearModule(nn.Module):
 
 
 class TransformerModelV4(torch.nn.Module):
-    def __init__(self,
-                 input_size,
-                 trans_hid_size,
-                 emb_dim,
-                 output_size,
-                 nhead,
-                 trans_nlayers,
-                 trans_dp,
-                 coefs_discr_N,
-                 main_ff_hid_size,
-                 main_ff_nlayers,
-                 main_bn_enable,
-                 main_dp,
-                 total_token_count
-                 ):
+    def __init__(
+            self, input_size, trans_hid_size, emb_dim, output_size, nhead, trans_nlayers, 
+            trans_dp, coefs_discr_N, main_ff_hid_size, main_ff_nlayers, main_bn_enable, 
+            main_dp, total_token_count
+        ):
+
         super(TransformerModelV4, self).__init__()
 
         self.embedding = nn.Embedding(total_token_count, embedding_dim=emb_dim)
