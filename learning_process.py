@@ -1,7 +1,49 @@
 import numpy as np 
 import torch
 import tqdm
+import pickle
 from functools import partial
+
+
+
+class ModelCheckpoint:
+    def __init__(self, filepath):
+        self.val_acc = None
+        self.val_loss = None
+        self.train_acc = None
+        self.train_loss = None
+        self.filepath = filepath
+    
+    def update(self, model, train_acc, train_loss, val_acc, val_loss):
+        if (self.val_acc is None) or (val_acc > self.val_acc):
+            self.val_acc = val_acc
+            self.val_loss = val_loss
+            self.train_acc = train_acc
+            self.train_loss = train_loss
+            self.save(model)
+    
+
+    def save(self, model):
+        torch.save(model, self.filepath)
+        with open('model_checkpoint.pkl', 'wb') as f:
+            pickle.dump(self, f)
+    
+    def load(self):
+        with open('model_checkpoint.pkl', 'rb') as f:
+            loaded_object = pickle.load(f)
+            self.val_acc = loaded_object.val_acc
+            self.val_loss = loaded_object.val_loss
+            self.train_acc = loaded_object.train_acc
+            self.train_loss = loaded_object.train_loss
+        return torch.load(self.filepath)
+
+    def __repr__(self):
+        return f"<Model Checkpoint>\n"\
+             + f"Validation Accuracy: {self.val_acc}\n"\
+             + f"Validation Loss: {self.val_loss}\n"\
+             + f"Train Accuracy: {self.train_acc}\n"\
+             + f"Train Loss: {self.train_loss}"
+        
 
 
 class Preprocessor:
@@ -24,7 +66,7 @@ class Preprocessor:
 class Learner:
     def __init__(
             self, model, optimizer, loss_fn, scheduler, 
-            train_dl, val_dl, device, epochs
+            train_dl, val_dl, device, epochs, save_best_models=False
         ):
         self.metrics = {
             "train_loss": [],
@@ -39,12 +81,17 @@ class Learner:
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.scheduler = scheduler
+        self.save_best_models = save_best_models
 
         self.train_dl = train_dl
         self.val_dl = val_dl
 
         self.epochs = epochs
         self.device = device
+
+
+        # service fields
+        self.best_val_accuracy = None
 
     def train_epoch(self, log_train_quality=False, verbose=False, epoch_no=None):
         self.model.train()
