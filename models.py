@@ -1,8 +1,31 @@
 import numpy as np 
 import torch
 from torch import nn
+import math
 
 
+class PositionalEncoding1D(torch.nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        super(PositionalEncoding1D, self).__init__()
+        # Создаём матрицу ‘max_len’ на ‘d_model’, заполняем нулями.
+        pe = torch.zeros(max_len, d_model)
+        # Создаём вектор положений (одномерный).
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        # Уменьшаем влияние с увеличением частоты.
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        
+        # Применяем паттерны синусов и косинусов.
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        # Делаем ‘pe’ постоянной и не требующей градиентов.
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        # Добавляем эмбеддинги, сберегая исходные размеры ‘x’.
+        x = x + self.pe[:x.size(0), :]
+        return x
 
 
 class LinearModule(nn.Module):
@@ -51,6 +74,8 @@ class TransformerModelV4(torch.nn.Module):
         super(TransformerModelV4, self).__init__()
 
         self.embedding = nn.Embedding(total_token_count, embedding_dim=emb_dim)
+        self.positional_encoding = PositionalEncoding1D(emb_dim, max_len=input_size)
+    
         encoder_layers = nn.TransformerEncoderLayer(
             emb_dim, 
             nhead, 
