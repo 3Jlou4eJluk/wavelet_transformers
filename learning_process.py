@@ -69,7 +69,8 @@ class Preprocessor:
 class Learner:
     def __init__(
             self, model, optimizer, loss_fn, scheduler, 
-            train_dl, val_dl, device, epochs, checkpoint_path=None
+            train_dl, val_dl, device, epochs, checkpoint_path=None,
+            max_training_time=None, chill_time=None
         ):
         self.metrics = {
             "train_loss": [],
@@ -85,6 +86,8 @@ class Learner:
         self.loss_fn = loss_fn
         self.scheduler = scheduler
         self.checkpoint_path = checkpoint_path
+        self.max_training_time = max_training_time
+        self.chill_time = chill_time
 
         self.train_dl = train_dl
         self.val_dl = val_dl
