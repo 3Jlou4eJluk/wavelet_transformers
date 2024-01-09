@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import tqdm
 import pickle
+import time
 from functools import partial
 
 
@@ -70,7 +71,7 @@ class Learner:
     def __init__(
             self, model, optimizer, loss_fn, scheduler, 
             train_dl, val_dl, device, epochs, checkpoint_path=None,
-            max_training_time=None, chill_time=None
+            max_training_time=None, chill_time=120
         ):
         self.metrics = {
             "train_loss": [],
@@ -104,7 +105,9 @@ class Learner:
 
         loss_sum = []
         acc_sum = []
+        current_work_time = 0
         for x, y in tqdm(self.train_dl, disable=not verbose, leave=True):
+            start_time = time.time()
             if 'cpu' not in self.device:
                 x = x.to(self.device)
                 y = y.to(self.device)
@@ -124,6 +127,11 @@ class Learner:
             self.optimizer.step(closure)
             if self.scheduler is not None:
                 self.scheduler.step()
+            current_work_time += time.time() - start_time
+            if (self.max_training_time is not None) and (current_work_time >= self.max_training_time):
+                current_work_time = 0
+                time.sleep(self.chill_time)
+    
         loss_sum_val = sum(loss_sum) / len(self.train_dl)
         acc_sum_val = sum(acc_sum) / len(self.train_dl)
 
