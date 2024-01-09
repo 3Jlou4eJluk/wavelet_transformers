@@ -7,12 +7,15 @@ from functools import partial
 
 
 class ModelCheckpoint:
-    def __init__(self, filepath):
+    def __init__(self, filepath=None):
         self.val_acc = None
         self.val_loss = None
         self.train_acc = None
         self.train_loss = None
         self.filepath = filepath
+        if filepath is None:
+            print('<Model Checkpoint>: Warning, model save path is not specified. Setting current directory.')
+            self.filepath = '.'
     
     def update(self, model, train_acc, train_loss, val_acc, val_loss):
         if (self.val_acc is None) or (val_acc > self.val_acc):
