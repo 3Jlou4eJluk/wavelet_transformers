@@ -99,13 +99,13 @@ class Learner:
 
         # service fields
         self.model_checkpoint = ModelCheckpoint(self.checkpoint_path)
+        self.current_work_time = 0
 
     def train_epoch(self, log_train_quality=False, verbose=False, epoch_no=None):
         self.model.train()
 
         loss_sum = []
         acc_sum = []
-        current_work_time = 0
         for x, y in tqdm(self.train_dl, disable=not verbose, leave=True):
             start_time = time.time()
             if 'cpu' not in self.device:
@@ -127,7 +127,7 @@ class Learner:
             self.optimizer.step(closure)
             if self.scheduler is not None:
                 self.scheduler.step()
-            current_work_time += time.time() - start_time
+            self.current_work_time += time.time() - start_time
             if (self.max_training_time is not None) and (current_work_time >= self.max_training_time):
                 current_work_time = 0
                 time.sleep(self.chill_time)
