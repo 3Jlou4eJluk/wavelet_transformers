@@ -208,7 +208,7 @@ class Learner:
                     epoch
                 ))
 
-    def action(self):
+    def train(self):
         if 'cpu' not in self.device:
             self.model.to(self.device)
         self.train_cycle()
