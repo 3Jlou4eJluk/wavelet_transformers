@@ -60,7 +60,7 @@ def build_batch_features(
                 coef_mat = hf_c_list[coef_mat_no]
                 resh_coefs = coef_mat.reshape(coef_mat.shape[0], -1)
                 if tmi < resh_coefs.shape[1]:
-                    arg_part = np.argpartition(resh_coefs, -tmi, axis=1)[:, -tmi:]
+                    arg_part = np.argpartition(np.abs(resh_coefs), -tmi, axis=1)[:, -tmi:]
                 else:
                     arg_part = np.tile(range(resh_coefs.shape[1]), (resh_coefs.shape[0], 1))
 
