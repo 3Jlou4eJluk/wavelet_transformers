@@ -1,10 +1,20 @@
 import numpy as np 
 import torch
-import tqdm
+from tqdm import tqdm
 import pickle
 import time
 from functools import partial
+from torch import nn
 
+
+def xavier_init(m):
+    if isinstance(m, (nn.Linear, nn.Conv2d)):
+        nn.init.xavier_normal_(m.weight)
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0)
+    elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
 
 
 class ModelCheckpoint:
@@ -218,3 +228,29 @@ class BruteForcer:
     def __init__(self):
         pass
 
+
+class ExperimentResult:
+    def __init__(
+            self, train_milestones, 
+            val_milestones, train_acc, 
+            val_acc, train_loss, val_loss,
+            save_path='./', prefix=''
+    ):
+        self.train_milestones = train_milestones
+        self.val_milestones = val_milestones
+        self.train_acc = train_acc
+        self.val_acc = val_acc
+        self.train_loss = train_loss
+        self.val_loss = val_loss
+    
+        self.save_path = save_path
+        self.prefix = prefix
+
+    def save(self):
+        with open(self.prefix + 'exp_res.pickle', 'wb') as f:
+            pickle.dump(self, f)
+
+    def load(self):
+        with open(self.prefix + 'exp_res.pickle', 'rb') as f:
+            pickle.load(f)
+    
