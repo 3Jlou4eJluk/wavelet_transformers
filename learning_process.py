@@ -18,17 +18,20 @@ def xavier_init(m):
 
 
 class ModelCheckpoint:
-    def __init__(self, filepath=None):
+    def __init__(self, filepath=None, disable=False):
         self.val_acc = None
         self.val_loss = None
         self.train_acc = None
         self.train_loss = None
         self.filepath = filepath
+        self.disable = disable
         if filepath is None:
             print('<Model Checkpoint>: Warning, model save path is not specified. Setting current directory.')
             self.filepath = '.'
     
     def update(self, model, train_acc, train_loss, val_acc, val_loss):
+        if self.disable:
+            return None
         if (self.val_acc is None) or (val_acc > self.val_acc):
             self.val_acc = val_acc
             self.val_loss = val_loss
@@ -42,14 +45,15 @@ class ModelCheckpoint:
         with open(f'{self.filepath}/model_checkpoint.pkl', 'wb') as f:
             pickle.dump(self, f)
     
-    def load(self):
+    def load(self, load_model=False):
         with open(f'{self.filepath}/model_checkpoint.pkl', 'rb') as f:
             loaded_object = pickle.load(f)
             self.val_acc = loaded_object.val_acc
             self.val_loss = loaded_object.val_loss
             self.train_acc = loaded_object.train_acc
             self.train_loss = loaded_object.train_loss
-        return torch.load(f"{self.filepath}/model_save.pt")
+        if load_model:
+            return torch.load(f"{self.filepath}/model_save.pt")
 
     def __repr__(self):
         return f"<Model Checkpoint>\n"\
@@ -77,11 +81,29 @@ class Preprocessor:
         return self.preprocessed_objects
 
 
+class FrozenValueDetector:
+    def __init__(self, epochs_without_change):
+        self.check_epochs = epochs_without_change
+        self.prev_value = None
+        self.equal_epochs = 0
+    
+    def step(self, value):
+        if value == self.prev_value:
+            self.equal_epochs += 1
+        else:
+            self.equal_epochs = 0
+            self.prev_value = value
+
+        if self.equal_epochs == self.check_epochs:
+            raise ValueError
+
+
 class Learner:
     def __init__(
             self, model, optimizer, loss_fn, scheduler, 
             train_dl, val_dl, device, epochs, checkpoint_path=None,
-            max_training_time=None, chill_time=120
+            max_training_time=None, chill_time=120, epochs_without_diff=None,
+            disable_checkpoints=False
         ):
         self.metrics = {
             "train_loss": [],
@@ -98,6 +120,7 @@ class Learner:
         self.scheduler = scheduler
         self.checkpoint_path = checkpoint_path
         self.max_training_time = max_training_time
+        self.disable_checkpoints = disable_checkpoints
         self.chill_time = chill_time
 
         self.train_dl = train_dl
@@ -106,9 +129,11 @@ class Learner:
         self.epochs = epochs
         self.device = device
 
+        self.acc_controller = FrozenValueDetector(epochs_without_diff)
+
 
         # service fields
-        self.model_checkpoint = ModelCheckpoint(self.checkpoint_path)
+        self.model_checkpoint = ModelCheckpoint(self.checkpoint_path, disable=disable_checkpoints)
         self.current_work_time = 0
 
     def train_epoch(self, log_train_quality=False, verbose=False, epoch_no=None):
@@ -247,10 +272,17 @@ class ExperimentResult:
         self.prefix = prefix
 
     def save(self):
-        with open(self.prefix + 'exp_res.pickle', 'wb') as f:
+        with open(self.save_path + self.prefix + 'exp_res.pickle', 'wb') as f:
             pickle.dump(self, f)
 
     def load(self):
-        with open(self.prefix + 'exp_res.pickle', 'rb') as f:
-            pickle.load(f)
-    
+        with open(self.save_path + self.prefix + 'exp_res.pickle', 'rb') as f:
+            obj = pickle.load(f)
+
+        self.train_milestones = obj.train_milestones
+        self.val_milestones = obj.val_milestones
+        self.train_acc = obj.train_acc
+        self.val_acc = obj.val_acc
+        self.train_loss = obj.train_loss
+        self.val_loss = obj.val_loss
+

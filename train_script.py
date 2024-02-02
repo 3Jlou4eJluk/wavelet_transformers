@@ -517,36 +517,50 @@ class VisionTransformer(nn.Module):
 import sys
 from learning_process import ExperimentResult
 
-def finalize_experiment(learner_obj, acc_value):
-    with learner_obj.metrics as d:
+def finalize_experiment(learner_obj):
+    if learner_obj is None:
         exp_res = ExperimentResult(
-            d['train_loss_epoch_no'],
-            d['val_loss_epoch_no'],
-            d['train_acc'],
-            d['val_acc'],
-            d['train_loss'],
-            d['val_loss']
+            -1, -1, -1, -1, -1, -1
         )
+    else:
+        with learner_obj.metrics as d:
+            exp_res = ExperimentResult(
+                d['train_loss_epoch_no'],
+                d['val_loss_epoch_no'],
+                d['train_acc'],
+                d['val_acc'],
+                d['train_loss'],
+                d['val_loss']
+            )
     exp_res.save()
     sys.exit(0)
 
-# @title Обучаем ViT
-model = VisionTransformer(
-    48, (32 * 32) // (args.patch_size ** 2), 
-    args.embedding_size, 10, 8, 8, 0., 4, 0.1, enable_spt=True
-)
+try: 
+    # @title Обучаем ViT
+    model = VisionTransformer(
+        48, (32 * 32) // (args.patch_size ** 2), 
+        args.embedding_size, 10, 8, 8, 0., 4, 0.1, enable_spt=True
+    )
 
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
-scheduler = None
-loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, int(args.initial_period * len(simple_train_loader)), 
+        int(args.period_increase_mult * len(simple_train_loader)), args.lr * args.min_lr
+    )
+    loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
 
-learner = Learner(
-    model, optimizer, loss_fn, scheduler,
-    simple_train_loader, simple_test_loader,
-    device, 10, checkpoint_path='/content/data/model_checkpoints',
-)
+    learner = Learner(
+        model, optimizer, loss_fn, scheduler,
+        simple_train_loader, simple_test_loader,
+        device, args.n_epochs, checkpoint_path='/content/data/model_checkpoints',
+        disable_checkpoints=True
+    )
 
-learner.train()
+    learner.train()
 
-learner.metrics['val_acc']
+    learner.metrics['val_acc']
+
+except:
+    finalize_experiment(None)
+
