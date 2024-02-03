@@ -528,15 +528,15 @@ def finalize_experiment(learner_obj):
             -1, -1, -1, -1, -1, -1
         )
     else:
-        with learner_obj.metrics as d:
-            exp_res = ExperimentResult(
+        d = learner_obj.metrics
+        exp_res = ExperimentResult(
                 d['train_loss_epoch_no'],
                 d['val_loss_epoch_no'],
                 d['train_acc'],
                 d['val_acc'],
                 d['train_loss'],
                 d['val_loss']
-            )
+        )
     exp_res.save()
     sys.exit(0)
 
@@ -566,6 +566,8 @@ try:
 
     learner.metrics['val_acc']
 
-except:
-    finalize_experiment(None)
+    finalize_experiment(learner)
 
+except Exception as e:
+    print('Произошла ошибка: ', e)
+    finalize_experiment(None)
