@@ -4,6 +4,11 @@ args = argparser.parse_args()
 
 import numpy as np
 import torch
+
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)  # игнорируем предупреждения этой категории
+warnings.filterwarnings("ignore", category=UserWarning)  # игнорируем предупреждения этой категории
+
 import tensorflow as tf
 import pywt
 import math
