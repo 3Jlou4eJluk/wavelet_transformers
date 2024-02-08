@@ -122,3 +122,114 @@ def build_batch_features(
         tok_repr = torch.tensor(tok_repr)
 
     return tok_repr, labels, total_token_count
+
+
+from torch.nn.functional import pad
+from sklearn.decomposition import SparseCoder, MiniBatchDictionaryLearning
+
+
+class kSVD_Vectorizer:
+    def __init__(
+            self, batch_count=100, patch_size=2,
+            n_components=128, batch_size=4, transform_algorithm='lasso_lars',
+            transform_alpha=0.1, max_iter=5, random_state=42
+        ):
+        self.patch_size = patch_size
+        self.batch_count = batch_count
+        self.n_components = n_components
+        self.batch_size = batch_size
+        self.transform_algorithm = transform_algorithm
+        self.transform_alpha = transform_alpha
+        self.max_iter = max_iter
+        self.random_state = random_state
+        
+        self.emb_dim = n_components
+
+        # Инициализируем массивы для хранения патчей для каждого канала
+        self.channel_patches = [np.array([]).reshape(0, self.patch_size, self.patch_size) for _ in range(3)]  # [R_patches, G_patches, B_patches]
+
+        # Патчи теперь лежат в channel_patches[0], channel_patches[1], and channel_patches[2]
+        self.dlearners = [
+            MiniBatchDictionaryLearning(
+                n_components=n_components, batch_size=batch_size, transform_algorithm=transform_algorithm,
+                transform_alpha=transform_alpha, max_iter=max_iter, random_state=random_state, tol=1e-3
+            ) for i in range(3)
+        ]
+
+        self.coders = None
+
+
+    def fit(self, trainloader):
+        print(f'Note: batch_count is {self.batch_count}')
+        print('Extracting patches')
+
+        self.channel_patches = [[], [], []]
+        for batch_idx, (images, _) in enumerate(tqdm(trainloader)):
+            # Преобразуем одно изображение в патчи размером 2x2
+            for im_no in range(len(images)):
+                patches = self.image_to_patches(images[im_no])  # размер (num_patches, C, patch_size, patch_size)
+                for c in range(3):  # Перебираем каждый канал цвета
+                    self.channel_patches[c].extend(patches[:, c, :, :].numpy())
+                    #self.channel_patches[c] = np.vstack((self.channel_patches[c], patches[:, c, :, :].numpy()))
+
+            # Для теста возьмём только первые несколько изображений
+            if batch_idx == self.batch_count:  # после 10 изображений остановимся
+                print(f"Batch count {self.batch_count} reached. Stopping fit process.")
+                break
+        self.channel_patches = np.array(self.channel_patches)
+
+
+        print(f'shape is {self.channel_patches.shape}')
+        # Давай посмотрим, что у нас получилось
+        for i, channel in enumerate(["R", "G", "B"]):
+            print(f"Channel {channel}, shape: {self.channel_patches[i].shape}")
+
+        print('Learning dictionary')
+        for i in range(3):
+            self.dlearners[i].fit(self.channel_patches[i].reshape((self.channel_patches[i].shape[0], -1)))
+
+        print('Creating coders')
+        self.coders = [
+            SparseCoder(
+                self.dlearners[i].components_, transform_algorithm='omp',
+                transform_alpha=None, transform_n_nonzero_coefs=None
+            ) for i in range(3)
+        ]
+
+    def transform(self, images, verbose=False):
+        all_images_features = []  # Главный список для хранения векторов коэффициентов всех изображений
+
+        time_dict =  {
+            'patches': 0,
+            'cycle_time': 0,
+            'decomp' : 0
+        }
+        # Обрабатываем каждое изображение отдельно
+        for image in images:
+            # Получаем патчи для текущего изображения
+            image_patches = self.image_to_patches(image)
+
+            # Для каждого канала создаем список для хранения его коэффициентов
+            channel_features = [
+                [], [], []
+            ]
+
+            # Достаем патчи для каждого канала
+            transposed_patches = image_patches.transpose(0, 1)
+            for i in range(len(transposed_patches)):
+                patches_channel = transposed_patches[i]
+                # Преобразование патчей текущего канала в массив и нормализация
+                patches_channel_flat = patches_channel.view(patches_channel.size(0), -1).numpy()
+
+                # Применяем соответствующий словарь для преобразования патчей канала в векторы коэффициентов
+                channel_features[i].extend(self.coders[i].transform(patches_channel_flat))
+
+            # Объединяем коэффициенты всех патчей для каждого канала
+            image_features = [np.array(channel_features[i]) for i in range(3)]
+
+            # Добавляем набор коэффициентов текущего изображения в общий список
+            all_images_features.append(image_features)
+
+        return np.array(all_images_features)
+
+
