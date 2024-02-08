@@ -137,7 +137,8 @@ class Learner:
     def __init__(
             self, model, optimizer, loss_fn, scheduler,
             train_dl, val_dl, device, epochs, checkpoint_path=None,
-            max_training_time=None, chill_time=120, early_stop=None
+            max_training_time=None, chill_time=120, early_stop=None,
+            disable_checkpoints=False
         ):
         self.metrics = {
             "train_loss": [],
@@ -165,7 +166,7 @@ class Learner:
 
 
         # service fields
-        self.model_checkpoint = ModelCheckpoint(self.checkpoint_path)
+        self.model_checkpoint = ModelCheckpoint(self.checkpoint_path, disable=disable_checkpoints)
         self.current_work_time = 0
 
     def train_epoch(self, log_train_quality=False, verbose=False, epoch_no=None):

@@ -25,7 +25,7 @@ import torch
 import math
 
 
-from learning_process import Learner, ModelCheckpoint
+from learning_process import Learner, ModelCheckpoint, EarlyStopping
 
 
 
