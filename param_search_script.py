@@ -11,9 +11,9 @@ import pickle
 ### Parameters search script arguments
 def str_to_bool(s):
     # Определение функции для преобразования строки в булево значение
-    if s.lower() in ('yes', 'true', 't', 'y', '1'):
+    if s.lower() in ('yes', 'true', 't', 'y', '1', 'True', 'Yes'):
         return True
-    elif s.lower() in ('no', 'false', 'f', 'n', '0'):
+    elif s.lower() in ('no', 'false', 'f', 'n', '0', 'No', 'False'):
         return False
     else:
         raise ValueError("Неверное представление для булевого значения: {0}".format(s))
@@ -39,7 +39,7 @@ argp.add_argument(
 argp.add_argument(
     "--trials_path", type=str,
     help='Path to save trials object', 
-    default='./'
+    default='.'
 )
 
 argp.add_argument(
@@ -69,7 +69,7 @@ def save_trials_file(trials, path, filename):
         pickle.dump(trials, f)
 
 def load_trials(path, name):
-    with open(f"{path}/{name}.pickle") as f:
+    with open(f"{path}/{name}.pickle", r) as f:
         res = pickle.load(f)
     return res
 
@@ -79,8 +79,11 @@ def signal_handler(sig, frame):
     # Всем дочерним процессам закрыться
     os.killpg(0, signal.SIGTERM)
 
+    if not argp.rewrite_trials:
+        sys.exit(0)
     # Сохраняем trials, если он есть
     try:
+        global trials
         save_trials_file(trials, argp.trials_path, argp.trials_name)
     except Exception as e:
         print(f"Ошибка сохранения файла trials. Исключение: {e}")
