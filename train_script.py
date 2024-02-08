@@ -543,7 +543,7 @@ try:
     # @title Обучаем ViT
     model = VisionTransformer(
         48, (32 * 32) // (args.patch_size ** 2), 
-        args.embedding_size, 10, 8, 8, 0., 4, 0.1, enable_spt=True
+        args.embedding_size, 10, 8, 8, 0., 8, 0.1, enable_spt=True
     )
 
 
@@ -554,11 +554,12 @@ try:
     )
     loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
 
+    early_stop = EarlyStopping(patience=7, delta=0.01)
     learner = Learner(
         model, optimizer, loss_fn, scheduler,
         simple_train_loader, simple_test_loader,
         device, args.n_epochs, checkpoint_path='/content/data/model_checkpoints',
-        disable_checkpoints=True
+        disable_checkpoints=True, early_stop=early_stop
     )
 
     learner.train()

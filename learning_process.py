@@ -98,12 +98,46 @@ class FrozenValueDetector:
             raise ValueError
 
 
+class EarlyStopping:
+    """Ранняя остановка для остановки обучения, когда ошибка валидации перестает уменьшаться."""
+    def __init__(self, patience=7, verbose=False, delta=0):
+        """
+        Args:
+            patience (int): Количество эпох без улучшения после которых обучение будет прекращено.
+            verbose (bool): Включает вывод сообщений о ранней остановке.
+            delta (float): Минимальное изменение между эпохами для рассмотрения как улучшение.
+        """
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.val_loss_min = np.Inf
+        self.delta = delta
+
+    def __call__(self, val_loss, model):
+        score = -val_loss
+
+        if self.best_score is None:
+            self.best_score = score
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            print(f'EarlyStopping counter: {self.counter} из {self.patience}')
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.counter = 0
+
+        if self.early_stop and self.verbose:
+            print("Ранняя остановка выполнена")
+
+
 class Learner:
     def __init__(
-            self, model, optimizer, loss_fn, scheduler, 
+            self, model, optimizer, loss_fn, scheduler,
             train_dl, val_dl, device, epochs, checkpoint_path=None,
-            max_training_time=None, chill_time=120, epochs_without_diff=None,
-            disable_checkpoints=False
+            max_training_time=None, chill_time=120, early_stop=None
         ):
         self.metrics = {
             "train_loss": [],
@@ -120,8 +154,8 @@ class Learner:
         self.scheduler = scheduler
         self.checkpoint_path = checkpoint_path
         self.max_training_time = max_training_time
-        self.disable_checkpoints = disable_checkpoints
         self.chill_time = chill_time
+        self.early_stop = early_stop
 
         self.train_dl = train_dl
         self.val_dl = val_dl
@@ -129,11 +163,9 @@ class Learner:
         self.epochs = epochs
         self.device = device
 
-        self.acc_controller = FrozenValueDetector(epochs_without_diff)
-
 
         # service fields
-        self.model_checkpoint = ModelCheckpoint(self.checkpoint_path, disable=disable_checkpoints)
+        self.model_checkpoint = ModelCheckpoint(self.checkpoint_path)
         self.current_work_time = 0
 
     def train_epoch(self, log_train_quality=False, verbose=False, epoch_no=None):
@@ -157,7 +189,7 @@ class Learner:
                 acc_sum.append(float((
                     pred_classes.detach().squeeze() == y.squeeze()
                 ).sum() / len(y)))
-            
+
             closure = partial(closure, x, y, loss_sum, acc_sum)
             self.optimizer.step(closure)
             if self.scheduler is not None:
@@ -166,7 +198,7 @@ class Learner:
             if (self.max_training_time is not None) and (current_work_time >= self.max_training_time):
                 current_work_time = 0
                 time.sleep(self.chill_time)
-    
+
         loss_sum_val = sum(loss_sum) / len(self.train_dl)
         acc_sum_val = sum(acc_sum) / len(self.train_dl)
 
@@ -199,7 +231,7 @@ class Learner:
                     train_loss += float(loss.item())
                 train_loss /= len(self.train_dl)
                 train_acc /= len(self.train_dl)
-            
+
             for x, y in tqdm(self.val_dl, disable=not verbose):
                 if 'cpu' not in self.device:
                     x = x.to(self.device)
@@ -209,13 +241,18 @@ class Learner:
                 val_acc += float((
                     pred_classes.detach().squeeze() == y.squeeze()
                 ).sum() / len(y))
-                
+
                 loss = self.loss_fn(pred, y.squeeze())
                 val_loss += float(loss.item())
-            
+
             val_acc /= len(self.val_dl)
             val_loss /= len(self.val_dl)
-        
+
+            self.early_stop(val_loss, self.model)
+            if self.early_stop.early_stop:
+                # прекращаем обучение
+                return None
+
         if epoch_no is not None:
             if log_train_quality:
                 self.metrics['train_loss_epoch_no'].append(epoch_no)
@@ -226,7 +263,7 @@ class Learner:
             self.metrics['val_loss'].append(val_loss)
             self.metrics['val_acc'].append(val_acc)
             self.model_checkpoint.update(
-                self.model, train_acc, train_loss, 
+                self.model, train_acc, train_loss,
                 val_acc, val_loss
             )
 
@@ -238,7 +275,7 @@ class Learner:
                 pbar.set_description(('Loss (Train/Test): {0:.3f}/{1:.3f}.\n' +\
                                      'Accuracy,% (Train/Test): {2:.2f}/{3:.2f}.\n' +\
                                      'Update Epoch: {4}').format(
-                    self.metrics['train_loss'][-1], self.metrics['val_loss'][-1], 
+                    self.metrics['train_loss'][-1], self.metrics['val_loss'][-1],
                     self.metrics['train_acc'][-1], self.metrics['val_acc'][-1],
                     epoch
                 ))
@@ -247,7 +284,6 @@ class Learner:
         if 'cpu' not in self.device:
             self.model.to(self.device)
         self.train_cycle()
-
 
 class BruteForcer:
     def __init__(self):
