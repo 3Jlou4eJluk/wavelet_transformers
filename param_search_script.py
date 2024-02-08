@@ -1,5 +1,6 @@
 from hyperopt import fmin, tpe, hp, STATUS_OK, Trials
 from learning_process import ExperimentResult
+
 import subprocess
 import os
 import signal
@@ -60,6 +61,12 @@ argp.add_argument(
     default=20
 )
 
+argp.add_argument(
+    "--terminal_cmd", type=str,
+    help='For example: konsole -e, xterm -e and etc',
+    default='konsole'
+)
+
 args = argp.parse_args()
 ###
 
@@ -113,10 +120,13 @@ def extract_accuracy():
     return max(exp_res.train_acc)
 
 # Обучение модели как целевая функция
+command = f"{venv_path}/bin/python train_script.py --lr {params['learning_rate']} --initial_period {params['initial_period']} --min_lr {params['min_lr']} --period_increase_mult {params['period_increase_mult']} --patch_size {params['patch_size']} --embedding_size {params['embedding_size']} --n_epochs {args.n_epochs} --batch_size {params['batch_size']}"
+
+
 def objective(params):
     subprocess.call(
         [
-            f'{venv_path}/bin/python', 'train_script.py', 
+            f'{venv_path}/bin/python', 'train_script.py',
             '--lr', str(params['learning_rate']), 
             '--initial_period', str(params['initial_period']),
             '--min_lr', str(params['min_lr']),
@@ -127,6 +137,8 @@ def objective(params):
             '--batch_size', str(params['batch_size'])
         ]
     )
+
+    subprocess.run(f'{args.terminal_cmd} "{command}"', shell=True)
     acc = extract_accuracy()
     return {'loss': -acc, 'status': STATUS_OK}
 
