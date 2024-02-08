@@ -69,7 +69,7 @@ def save_trials_file(trials, path, filename):
         pickle.dump(trials, f)
 
 def load_trials(path, name):
-    with open(f"{path}/{name}.pickle", r) as f:
+    with open(f"{path}/{name}.pickle", 'rb') as f:
         res = pickle.load(f)
     return res
 
@@ -77,17 +77,17 @@ def load_trials(path, name):
 def signal_handler(sig, frame):
     print("Received Ctrl+C - closing all processes")
     # Всем дочерним процессам закрыться
-    os.killpg(0, signal.SIGTERM)
 
-    if not argp.rewrite_trials:
+    if not args.rewrite_trials:
         sys.exit(0)
     # Сохраняем trials, если он есть
     try:
         global trials
-        save_trials_file(trials, argp.trials_path, argp.trials_name)
+        save_trials_file(trials, args.trials_path, args.trials_name)
     except Exception as e:
         print(f"Ошибка сохранения файла trials. Исключение: {e}")
 
+    os.killpg(0, signal.SIGTERM)
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
