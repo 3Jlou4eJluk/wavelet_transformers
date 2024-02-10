@@ -62,7 +62,7 @@ validation_dataset = datasets.CIFAR10(
 
 simple_train_loader = torch.utils.data.DataLoader(
     training_dataset, batch_size=args.batch_size,
-    shuffle=False
+    shuffle=True
 )
 simple_test_loader = torch.utils.data.DataLoader(
     validation_dataset, batch_size=args.batch_size,
