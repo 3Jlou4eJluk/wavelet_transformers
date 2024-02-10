@@ -26,6 +26,9 @@ import math
 
 
 from learning_process import Learner, ModelCheckpoint, EarlyStopping
+from wavelet_augmentation import WaveletAugmentation
+
+
 
 
 
@@ -35,6 +38,7 @@ transform_train = transforms.Compose([transforms.Resize((32,32)),  #resises the 
                                       transforms.RandomAffine(0, shear=10, scale=(0.8,1.2)), #Performs actions like zooms, change shear angles.
                                       transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2), # Set the color params
                                       transforms.ToTensor(), # comvert the image to tensor so that it can work with torch
+                                      WaveletAugmentation(levels=4),
                                       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) #Normalize all the images
                                ])
 

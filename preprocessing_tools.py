@@ -1,6 +1,7 @@
 import numpy as np 
 import torch
 import pywt
+from tqdm.notebook import tqdm
 
 
 
@@ -124,8 +125,10 @@ def build_batch_features(
     return tok_repr, labels, total_token_count
 
 
+# @title kSVD
 from torch.nn.functional import pad
-from sklearn.decomposition import SparseCoder, MiniBatchDictionaryLearning
+from sklearn.decomposition import MiniBatchDictionaryLearning
+from einops import rearrange
 
 
 class kSVD_Vectorizer:
@@ -142,7 +145,7 @@ class kSVD_Vectorizer:
         self.transform_alpha = transform_alpha
         self.max_iter = max_iter
         self.random_state = random_state
-        
+
         self.emb_dim = n_components
 
         # Инициализируем массивы для хранения патчей для каждого канала
@@ -188,48 +191,28 @@ class kSVD_Vectorizer:
         for i in range(3):
             self.dlearners[i].fit(self.channel_patches[i].reshape((self.channel_patches[i].shape[0], -1)))
 
-        print('Creating coders')
-        self.coders = [
-            SparseCoder(
-                self.dlearners[i].components_, transform_algorithm='omp',
-                transform_alpha=None, transform_n_nonzero_coefs=None
-            ) for i in range(3)
-        ]
-
     def transform(self, images, verbose=False):
-        all_images_features = []  # Главный список для хранения векторов коэффициентов всех изображений
+        # extracting patches
+        bs = images.shape[0]
+        patches = rearrange(
+            images, "b c (h hp) (w wp) -> c (b h w) (hp wp)", 
+            hp=self.patch_size, wp=self.patch_size
+        )
 
-        time_dict =  {
-            'patches': 0,
-            'cycle_time': 0,
-            'decomp' : 0
-        }
-        # Обрабатываем каждое изображение отдельно
-        for image in images:
-            # Получаем патчи для текущего изображения
-            image_patches = self.image_to_patches(image)
+        rf = self.dlearners[0].transform(patches[0, :, :])
+        gf = self.dlearners[1].transform(patches[1, :, :])
+        bf = self.dlearners[2].transform(patches[2, :, :])
+        res = rearrange([rf, gf, bf], "c (b pc) vl -> b c pc vl", b=bs)
+        return res
 
-            # Для каждого канала создаем список для хранения его коэффициентов
-            channel_features = [
-                [], [], []
-            ]
+    def image_to_patches(self, image):
+        # image - тензор PyTorch (C, H, W)
+        C, H, W = image.size()
 
-            # Достаем патчи для каждого канала
-            transposed_patches = image_patches.transpose(0, 1)
-            for i in range(len(transposed_patches)):
-                patches_channel = transposed_patches[i]
-                # Преобразование патчей текущего канала в массив и нормализация
-                patches_channel_flat = patches_channel.view(patches_channel.size(0), -1).numpy()
+        # Теперь разделим на патчи
+        patches = image.unfold(1, self.patch_size, self.patch_size).unfold(2, self.patch_size, self.patch_size)
+        patches = patches.contiguous().view(C, -1, self.patch_size, self.patch_size)
 
-                # Применяем соответствующий словарь для преобразования патчей канала в векторы коэффициентов
-                channel_features[i].extend(self.coders[i].transform(patches_channel_flat))
-
-            # Объединяем коэффициенты всех патчей для каждого канала
-            image_features = [np.array(channel_features[i]) for i in range(3)]
-
-            # Добавляем набор коэффициентов текущего изображения в общий список
-            all_images_features.append(image_features)
-
-        return np.array(all_images_features)
-
+        # Переставим размерности
+        return patches.permute(1, 0, 2, 3)
 
