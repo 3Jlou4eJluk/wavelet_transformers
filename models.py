@@ -1,7 +1,10 @@
 import numpy as np 
 import torch
 from torch import nn
+from einops import rearrange, reduce
 import math
+import ptwt
+import pywt
 
 
 class PositionalEncoding1D(torch.nn.Module):
@@ -106,3 +109,55 @@ class TransformerModelV4(torch.nn.Module):
         o = self.main_ff(o)
         o = self.fc_combined(o)
         return o
+
+
+class WaveLinear(nn.Module):
+    def __init__(self, patch_size=8, image_shape=(32, 32), emb_dim=256, wave='bior2.2'):
+        super(WaveLinear, self).__init__()
+        self.linear_proj = nn.Linear(
+            patch_size ** 2, emb_dim
+        )
+        self.wave_proj = nn.LazyLinear(
+            emb_dim
+        )
+        self.color_proj1 = nn.Linear(
+            patch_size ** 2, emb_dim
+        )
+        self.color_proj2 = nn.Linear(
+            patch_size ** 2, emb_dim
+        )
+
+        # service fields
+        self.patch_size = patch_size
+        self.wavelet_transformation = partial(
+            ptwt.wavedec2, wavelet=pywt.Wavelet(wave), level=1
+        )
+
+
+    def forward(self, x):
+        patches = rearrange(
+            x, f"bs c (h ph) (w pw) -> c bs (h w) ph pw",
+            ph = self.patch_size, pw = self.patch_size
+        )
+        shape_patches, color_patches1, color_patches2 = patches[0], patches[1], patches[2]
+
+        # shape of this thing is "bs (h * w) (ph // 2) (pw // 2)"
+        wavelet_patches = self.wavelet_transformation(shape_patches)[1]
+
+        patch_embeddings = self.linear_proj(
+            rearrange(shape_patches, "bs pc ph pw -> bs pc (ph pw)")
+        )
+        wave_embeddings = self.wave_proj(
+            rearrange(list(wavelet_patches), "mat_no bs pc ph pw -> bs pc (mat_no ph pw)")
+        )
+        color1_embeddings = self.color_proj1(
+            rearrange(color_patches1, "bs pc ph pw -> bs pc (ph pw)")
+        )
+        color2_embeddings = self.color_proj2(
+            rearrange(color_patches2, "bs pc ph pw -> bs pc (ph pw)")
+        )
+
+        result_embeddings = patch_embeddings + wave_embeddings \
+                          + color1_embeddings + color2_embeddings
+        return result_embeddings
+
