@@ -1,10 +1,12 @@
 import numpy as np 
 import torch
-from torch import nn
-from einops import rearrange, reduce
 import math
 import ptwt
 import pywt
+
+from torch import nn
+from einops import rearrange, reduce
+from functools import partial
 
 
 class PositionalEncoding1D(torch.nn.Module):
