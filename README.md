@@ -17,3 +17,10 @@ This is repository for my scientific work code.
 3. Different approaches to train Visual Transformer Model
 
 
+
+
+
+## Contact Information
+
+- **Email:** [mikhail.kalinin.02@inbox.ru](mailto:mikhail.kalinin.02@inbox.ru)
+- **Telegram:** [@mikh_kalinin](https://t.me/mikh_kalinin)
